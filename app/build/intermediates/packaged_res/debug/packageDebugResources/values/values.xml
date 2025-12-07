@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="ic_launcher_background">#FF6750A4</color>
+    <color name="white">#FFFFFFFF</color>
+    <string name="app_name">PocketDev</string>
+    <style name="Theme.PocketDev" parent="android:Theme.Material.Light.NoActionBar">
+        
+        <item name="android:windowBackground">@color/white</item>
+    </style>
+</resources>

@@ -1,0 +1,10 @@
+R_DEF: Internal format may change without notice
+local
+color black
+color ic_launcher_background
+color white
+mipmap ic_launcher
+string app_name
+style Theme.PocketDev
+xml backup_rules
+xml data_extraction_rules
