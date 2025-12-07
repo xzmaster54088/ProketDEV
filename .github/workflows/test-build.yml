@@ -1,0 +1,38 @@
+name: Test Build
+
+on:
+  workflow_dispatch:  # 仅手动触发
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+
+    - name: Debug file permissions
+      run: |
+        echo "=== File permissions ==="
+        ls -la gradlew
+        echo "=== File type ==="
+        file gradlew
+        echo "=== First few lines ==="
+        head -5 gradlew | cat -A
+
+    - name: Fix gradlew permissions and line endings
+      run: |
+        # 确保 gradlew 有执行权限
+        chmod +x ./gradlew
+        # 修复可能的 Windows 行结束符问题
+        sed -i 's/\r$//' ./gradlew
+        echo "=== After fixing ==="
+        head -5 gradlew | cat -A
+
+    - name: Test gradlew execution
+      run: |
+        # 测试 gradlew 是否可以执行
+        ./gradlew --version || echo "Gradle version check failed"
+        echo "Gradle test completed"
