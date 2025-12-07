@@ -15,70 +15,272 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        # 确保文件权限被保留
         persist-credentials: false
-        # 添加这个设置来确保文件权限正确
         fetch-depth: 0
+        # 增加子模块检查
+        submodules: recursive
 
-    - name: Debug file permissions
+    - name: Debug gradlew file
       run: |
-        # 显示 gradlew 文件的详细信息
         echo "=== Checking gradlew file ==="
         ls -la gradlew
-        echo -e "\n=== File type ==="
+        echo -e "\n=== File type and size ==="
         file gradlew
-        echo -e "\n=== First 10 lines ==="
-        head -10 gradlew
-        
-    - name: Fix gradlew permissions and line endings
+        wc -l gradlew
+        echo -e "\n=== Checking line 179 specifically ==="
+        sed -n '179p' gradlew
+        echo -e "\n=== Checking line 178-180 ==="
+        sed -n '178,180p' gradlew
+        echo -e "\n=== First 5 lines ==="
+        head -5 gradlew
+        echo -e "\n=== Last 5 lines ==="
+        tail -5 gradlew
+
+    - name: Completely regenerate gradlew if needed
       run: |
-        # 确保 gradlew 有执行权限
-        chmod +x ./gradlew
-        # 修复可能的 Windows 行结束符问题
-        sed -i 's/\r$//' ./gradlew
-        # 确保 gradlew 文件格式正确
-        if [[ ! $(head -1 gradlew) == "#!/usr/bin/env bash" ]]; then
-          echo "Fixing shebang in gradlew"
-          sed -i '1s/.*/#!\/usr\/bin\/env bash/' gradlew
+        # 备份原始文件
+        cp gradlew gradlew.original
+        
+        # 检查gradlew文件是否有效
+        if ! head -1 gradlew | grep -q "^#!/usr/bin/env bash"; then
+          echo "Gradlew has invalid shebang, regenerating..."
+          # 从wrapper重新生成gradlew
+          if [ -f gradle/wrapper/gradle-wrapper.properties ]; then
+            echo "Found gradle wrapper properties, using it to regenerate"
+            # 使用Gradle官方提供的gradlew脚本
+            curl -s https://raw.githubusercontent.com/gradle/gradle/master/gradlew -o gradlew.new
+            chmod +x gradlew.new
+            # 检查新文件
+            head -5 gradlew.new
+            mv gradlew.new gradlew
+          fi
         fi
-        # 再次验证权限
-        echo -e "\n=== After fixing ==="
+        
+        # 确保gradlew是有效的bash脚本
+        if ! bash -n gradlew 2>/dev/null; then
+          echo "Gradlew is not a valid bash script, replacing with default..."
+          cat > gradlew << 'EOF'
+#!/usr/bin/env bash
+
+##############################################################################
+##
+##  Gradle start up script for UN*X
+##
+##############################################################################
+
+# Attempt to set APP_HOME
+# Resolve links: $0 may be a link
+PRG="$0"
+# Need this for relative symlinks.
+while [ -h "$PRG" ] ; do
+    ls="$(ls -ld "$PRG")"
+    link="$(expr "$ls" : '.*-> \(.*\)$')"
+    if expr "$link" : '/.*' > /dev/null; then
+        PRG="$link"
+    else
+        PRG="$(dirname "$PRG")/$link"
+    fi
+done
+SAVED="`pwd`"
+cd "`dirname \"$PRG\"`/" >/dev/null
+APP_HOME="`pwd -P`"
+cd "$SAVED" >/dev/null
+
+APP_NAME="Gradle"
+APP_BASE_NAME="$(basename "$0")"
+
+# Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
+DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
+
+# Use the maximum available, or set MAX_FD != -1 to use that value.
+MAX_FD="maximum"
+
+warn () {
+    echo "$*"
+}
+
+die () {
+    echo
+    echo "$*"
+    echo
+    exit 1
+}
+
+# OS specific support (must be 'true' or 'false').
+cygwin=false
+msys=false
+darwin=false
+nonstop=false
+case "`uname`" in
+  CYGWIN* )
+    cygwin=true
+    ;;
+  Darwin* )
+    darwin=true
+    ;;
+  MINGW* )
+    msys=true
+    ;;
+  NONSTOP* )
+    nonstop=true
+    ;;
+esac
+
+CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
+
+# Determine the Java command to use to start the JVM.
+if [ -n "$JAVA_HOME" ] ; then
+    if [ -f "$JAVA_HOME/jre/sh/java" ] ; then
+        # IBM's JDK on AIX uses strange locations for the executables
+        JAVACMD="$JAVA_HOME/jre/sh/java"
+    else
+        JAVACMD="$JAVA_HOME/bin/java"
+    fi
+    if [ ! -x "$JAVACMD" ] ; then
+        die "ERROR: JAVA_HOME is set to an invalid directory: $JAVA_HOME
+
+Please set the JAVA_HOME variable in your environment to match the
+location of your Java installation."
+    fi
+else
+    JAVACMD="java"
+    which java >/dev/null 2>&1 || die "ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH.
+
+Please set the JAVA_HOME variable in your environment to match the
+location of your Java installation."
+fi
+
+# Increase the maximum file descriptors if we can.
+if [ "$cygwin" = "false" -a "$darwin" = "false" -a "$nonstop" = "false" ] ; then
+    MAX_FD_LIMIT=`ulimit -H -n`
+    if [ $? -eq 0 ] ; then
+        if [ "$MAX_FD" = "maximum" -o "$MAX_FD" = "max" ] ; then
+            MAX_FD="$MAX_FD_LIMIT"
+        fi
+        ulimit -n $MAX_FD
+        if [ $? -ne 0 ] ; then
+            warn "Could not set maximum file descriptor limit: $MAX_FD"
+        fi
+    else
+        warn "Could not query maximum file descriptor limit: $MAX_FD_LIMIT"
+    fi
+fi
+
+# For Darwin, add options to specify how the application appears in the dock
+if $darwin; then
+    GRADLE_OPTS="$GRADLE_OPTS \"-Xdock:name=$APP_NAME\" \"-Xdock:icon=$APP_HOME/media/gradle.icns\""
+fi
+
+# For Cygwin or MSYS, switch paths to Windows format before running java
+if [ "$cygwin" = "true" -o "$msys" = "true" ] ; then
+    APP_HOME="$(cygpath --path --mixed "$APP_HOME")"
+    CLASSPATH="$(cygpath --path --mixed "$CLASSPATH")"
+    JAVACMD="$(cygpath --path --unix "$JAVACMD")"
+
+    # We build the pattern for arguments to be converted via cygpath
+    ROOTDIRSRAW=`find -L / -maxdepth 1 -mindepth 1 -type d 2>/dev/null`
+    SEP=""
+    for dir in $ROOTDIRSRAW ; do
+        ROOTDIRS="$ROOTDIRS$SEP$dir"
+        SEP="|"
+    done
+    OURCYGPATTERN="(^($ROOTDIRS))"
+    # Add a user-defined pattern to the cygpath arguments
+    if [ "$GRADLE_CYGPATTERN" != "" ] ; then
+        OURCYGPATTERN="$OURCYGPATTERN|($GRADLE_CYGPATTERN)"
+    fi
+    # Now convert the arguments - kludge to limit ourselves to /bin/sh
+    i=0
+    for arg in "$@" ; do
+        CHECK=`echo "$arg"|grep -E -c "$OURCYGPATTERN" -`
+        CHECK2=`echo "$arg"|grep -E -c "^-"`                                 ### Determine if an option
+
+        if [ $CHECK -ne 0 ] && [ $CHECK2 -eq 0 ] ; then                      ### Added a condition
+            eval `echo args$i`=`cygpath --path --ignore --mixed "$arg"`
+        else
+            eval `echo args$i`="\"$arg\""
+        fi
+        i=$(($i+1))
+    done
+    case $i in
+        0) set -- ;;
+        1) set -- "$args0" ;;
+        2) set -- "$args0" "$args1" ;;
+        3) set -- "$args0" "$args1" "$args2" ;;
+        4) set -- "$args0" "$args1" "$args2" "$args3" ;;
+        5) set -- "$args0" "$args1" "$args2" "$args3" "$args4" ;;
+        6) set -- "$args0" "$args1" "$args2" "$args3" "$args4" "$args5" ;;
+        7) set -- "$args0" "$args1" "$args2" "$args3" "$args4" "$args5" "$args6" ;;
+        8) set -- "$args0" "$args1" "$args2" "$args3" "$args4" "$args5" "$args6" "$args7" ;;
+        9) set -- "$args0" "$args1" "$args2" "$args3" "$args4" "$args5" "$args6" "$args7" "$args8" ;;
+    esac
+fi
+
+# Escape application args
+save () {
+    for i do printf %s\\n "$i" | sed "s/'/'\\\\''/g;1s/^/'/;\$s/\$/' \\\\/" ; done
+    echo " "
+}
+APP_ARGS=$(save "$@")
+
+# Collect all arguments for the java command, following the shell quoting and substitution rules
+eval set -- $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS "\"-Dorg.gradle.appname=$APP_BASE_NAME\"" -classpath "\"$CLASSPATH\"" org.gradle.wrapper.GradleWrapperMain "$APP_ARGS"
+
+exec "$JAVACMD" "$@"
+EOF
+        fi
+
+    - name: Fix gradlew permissions
+      run: |
+        # 彻底修复权限和行结束符
+        chmod +x gradlew
+        # 修复行结束符（DOS到Unix）
+        sed -i 's/\r$//' gradlew
+        # 确保文件以正确的shebang开始
+        if ! head -1 gradlew | grep -q "^#!/usr/bin/env bash"; then
+          sed -i '1i#!/usr/bin/env bash' gradlew
+        fi
+        # 验证文件
+        echo "=== Final gradlew check ==="
         ls -la gradlew
-        # 使用 bash 显式执行，避免权限问题
-        bash ./gradlew --version || echo "Gradle version check completed"
+        head -5 gradlew
+        # 尝试执行一个简单命令
+        bash gradlew --help || echo "Gradle help check completed"
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
-        
+
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       with:
-        # 添加 Android SDK 版本配置
         api-level: 33
         build-tools: 33.0.2
         ndk: 25.1.8937393
-        cmake: 3.22.1
-        cmdline-tools: latest
-        
+
     - name: Cache Gradle dependencies
       uses: actions/cache@v4
       with:
         path: |
           ~/.gradle/caches
           ~/.gradle/wrapper
+          ~/.android/build-cache
         key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
         restore-keys: |
           ${{ runner.os }}-gradle-
 
     - name: Build with Gradle
-      # 使用 bash 显式执行，确保权限问题不会发生
-      run: bash ./gradlew build --no-daemon --stacktrace
+      timeout-minutes: 15
+      run: |
+        # 使用完整的路径和参数
+        bash ./gradlew build --no-daemon --stacktrace --info --warning-mode all
 
     - name: Run tests
-      run: bash ./gradlew test --no-daemon --stacktrace
+      if: always()
+      run: |
+        bash ./gradlew test --no-daemon --stacktrace --info
 
     - name: Upload build artifacts
       if: success()
@@ -101,17 +303,16 @@ jobs:
         persist-credentials: false
         fetch-depth: 0
 
-    - name: Fix gradlew permissions and line endings
+    - name: Fix gradlew permissions
       run: |
-        chmod +x ./gradlew
-        sed -i 's/\r$//' ./gradlew
-        if [[ ! $(head -1 gradlew) == "#!/usr/bin/env bash" ]]; then
-          echo "Fixing shebang in gradlew"
-          sed -i '1s/.*/#!\/usr\/bin\/env bash/' gradlew
+        chmod +x gradlew
+        sed -i 's/\r$//' gradlew
+        if ! head -1 gradlew | grep -q "^#!/usr/bin/env bash"; then
+          sed -i '1i#!/usr/bin/env bash' gradlew
         fi
-        # 验证文件
+        # 验证
         ls -la gradlew
-        bash ./gradlew --version || echo "Gradle version check completed"
+        head -5 gradlew
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -136,7 +337,8 @@ jobs:
           ${{ runner.os }}-gradle-
 
     - name: Run lint checks
-      run: bash ./gradlew lint --no-daemon --stacktrace
+      run: |
+        bash ./gradlew lint --no-daemon --stacktrace --info
 
     - name: Upload lint results
       if: always()
