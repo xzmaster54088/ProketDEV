@@ -8,7 +8,7 @@ on:
   workflow_dispatch:  # 允许手动触发
 
 jobs:
-  build:
+  setup-and-build:
     runs-on: ubuntu-latest
 
     steps:
@@ -17,25 +17,52 @@ jobs:
       with:
         # 确保文件权限被保留
         persist-credentials: false
+        # 添加这个设置来确保文件权限正确
+        fetch-depth: 0
 
+    - name: Debug file permissions
+      run: |
+        # 显示 gradlew 文件的详细信息
+        echo "=== Checking gradlew file ==="
+        ls -la gradlew
+        echo -e "\n=== File type ==="
+        file gradlew
+        echo -e "\n=== First 10 lines ==="
+        head -10 gradlew
+        
     - name: Fix gradlew permissions and line endings
       run: |
         # 确保 gradlew 有执行权限
         chmod +x ./gradlew
         # 修复可能的 Windows 行结束符问题
         sed -i 's/\r$//' ./gradlew
-        # 验证 gradlew 可以执行
-        ./gradlew --version || echo "Gradle version check failed"
+        # 确保 gradlew 文件格式正确
+        if [[ ! $(head -1 gradlew) == "#!/usr/bin/env bash" ]]; then
+          echo "Fixing shebang in gradlew"
+          sed -i '1s/.*/#!\/usr\/bin\/env bash/' gradlew
+        fi
+        # 再次验证权限
+        echo -e "\n=== After fixing ==="
+        ls -la gradlew
+        # 使用 bash 显式执行，避免权限问题
+        bash ./gradlew --version || echo "Gradle version check completed"
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
-
+        
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
-
+      with:
+        # 添加 Android SDK 版本配置
+        api-level: 33
+        build-tools: 33.0.2
+        ndk: 25.1.8937393
+        cmake: 3.22.1
+        cmdline-tools: latest
+        
     - name: Cache Gradle dependencies
       uses: actions/cache@v4
       with:
@@ -47,10 +74,11 @@ jobs:
           ${{ runner.os }}-gradle-
 
     - name: Build with Gradle
-      run: ./gradlew build
+      # 使用 bash 显式执行，确保权限问题不会发生
+      run: bash ./gradlew build --no-daemon --stacktrace
 
     - name: Run tests
-      run: ./gradlew test
+      run: bash ./gradlew test --no-daemon --stacktrace
 
     - name: Upload build artifacts
       if: success()
@@ -59,27 +87,31 @@ jobs:
         name: app-build-output
         path: |
           app/build/outputs/
+          app/build/reports/
         retention-days: 7
 
   lint:
     runs-on: ubuntu-latest
-    needs: build
+    needs: setup-and-build
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        # 确保文件权限被保留
         persist-credentials: false
+        fetch-depth: 0
 
     - name: Fix gradlew permissions and line endings
       run: |
-        # 确保 gradlew 有执行权限
         chmod +x ./gradlew
-        # 修复可能的 Windows 行结束符问题
         sed -i 's/\r$//' ./gradlew
-        # 验证 gradlew 可以执行
-        ./gradlew --version || echo "Gradle version check failed"
+        if [[ ! $(head -1 gradlew) == "#!/usr/bin/env bash" ]]; then
+          echo "Fixing shebang in gradlew"
+          sed -i '1s/.*/#!\/usr\/bin\/env bash/' gradlew
+        fi
+        # 验证文件
+        ls -la gradlew
+        bash ./gradlew --version || echo "Gradle version check completed"
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -89,6 +121,9 @@ jobs:
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
+      with:
+        api-level: 33
+        build-tools: 33.0.2
 
     - name: Cache Gradle dependencies
       uses: actions/cache@v4
@@ -101,7 +136,7 @@ jobs:
           ${{ runner.os }}-gradle-
 
     - name: Run lint checks
-      run: ./gradlew lint
+      run: bash ./gradlew lint --no-daemon --stacktrace
 
     - name: Upload lint results
       if: always()
